@@ -6,9 +6,9 @@ from ..database import get_db
 from ..models import Guardian
 from ..rut import normalize_rut
 from ..schemas import GuardianIn, GuardianOut, Page
-from ..security import current_user
+from ..security import require_management, require_staff
 
-router = APIRouter(prefix="/guardians", tags=["Apoderados"], dependencies=[Depends(current_user)])
+router = APIRouter(prefix="/guardians", tags=["Apoderados"], dependencies=[Depends(require_staff)])
 
 
 def _check_rut_free(db: Session, rut: str, exclude_id: int | None = None) -> None:
@@ -47,7 +47,12 @@ def list_guardians(
     return {"items": items, "total": total}
 
 
-@router.post("", response_model=GuardianOut, status_code=201)
+@router.post(
+    "",
+    response_model=GuardianOut,
+    status_code=201,
+    dependencies=[Depends(require_management)],
+)
 def create_guardian(data: GuardianIn, db: Session = Depends(get_db)):
     _check_rut_free(db, data.rut)
     guardian = Guardian(**data.model_dump())
@@ -62,7 +67,11 @@ def get_guardian(guardian_id: int, db: Session = Depends(get_db)):
     return _get_or_404(db, guardian_id)
 
 
-@router.put("/{guardian_id}", response_model=GuardianOut)
+@router.put(
+    "/{guardian_id}",
+    response_model=GuardianOut,
+    dependencies=[Depends(require_management)],
+)
 def update_guardian(guardian_id: int, data: GuardianIn, db: Session = Depends(get_db)):
     guardian = _get_or_404(db, guardian_id)
     _check_rut_free(db, data.rut, exclude_id=guardian.id)
@@ -73,7 +82,9 @@ def update_guardian(guardian_id: int, data: GuardianIn, db: Session = Depends(ge
     return guardian
 
 
-@router.delete("/{guardian_id}", status_code=204)
+@router.delete(
+    "/{guardian_id}", status_code=204, dependencies=[Depends(require_management)]
+)
 def delete_guardian(guardian_id: int, db: Session = Depends(get_db)):
     guardian = _get_or_404(db, guardian_id)
     for student in guardian.students:  # Los alumnos quedan sin apoderado asignado

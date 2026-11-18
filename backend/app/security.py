@@ -45,3 +45,28 @@ def current_user(
     if user is None or not user.is_active:
         raise error
     return user
+
+
+def require_roles(*roles: str):
+    """Dependencia que exige uno de los roles indicados."""
+
+    def dependency(user: User = Depends(current_user)) -> User:
+        if user.role not in roles:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN, "No tienes permisos para esta acción"
+            )
+        return user
+
+    return dependency
+
+
+# Personal del colegio: puede entrar al panel.
+require_staff = require_roles("admin", "secretaria", "profesor")
+# Administración: gestión de usuarios.
+require_admin = require_roles("admin")
+# Secretaría y administración: datos maestros, admisiones y pagos.
+require_management = require_roles("admin", "secretaria")
+# Personal docente y administrativo: asistencia y notas.
+require_academic = require_roles("admin", "secretaria", "profesor")
+# Portal de apoderados y estudiantes.
+require_portal = require_roles("apoderado", "estudiante")

@@ -4,11 +4,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from ..database import get_db
-from ..models import Course, Teacher
+from ..models import Attendance, Course, Grade, Teacher
 from ..schemas import CourseIn, CourseOut, Page
-from ..security import current_user
+from ..security import require_management, require_staff
 
-router = APIRouter(prefix="/courses", tags=["Cursos"], dependencies=[Depends(current_user)])
+router = APIRouter(prefix="/courses", tags=["Cursos"], dependencies=[Depends(require_staff)])
 
 
 def _check_teacher(db: Session, teacher_id: int | None) -> None:
@@ -47,7 +47,12 @@ def list_courses(
     return {"items": items, "total": total}
 
 
-@router.post("", response_model=CourseOut, status_code=201)
+@router.post(
+    "",
+    response_model=CourseOut,
+    status_code=201,
+    dependencies=[Depends(require_management)],
+)
 def create_course(data: CourseIn, db: Session = Depends(get_db)):
     _check_teacher(db, data.head_teacher_id)
     course = Course(**data.model_dump())
@@ -66,7 +71,11 @@ def get_course(course_id: int, db: Session = Depends(get_db)):
     return _get_or_404(db, course_id)
 
 
-@router.put("/{course_id}", response_model=CourseOut)
+@router.put(
+    "/{course_id}",
+    response_model=CourseOut,
+    dependencies=[Depends(require_management)],
+)
 def update_course(course_id: int, data: CourseIn, db: Session = Depends(get_db)):
     course = _get_or_404(db, course_id)
     _check_teacher(db, data.head_teacher_id)
@@ -81,9 +90,20 @@ def update_course(course_id: int, data: CourseIn, db: Session = Depends(get_db))
     return course
 
 
-@router.delete("/{course_id}", status_code=204)
+@router.delete(
+    "/{course_id}", status_code=204, dependencies=[Depends(require_management)]
+)
 def delete_course(course_id: int, db: Session = Depends(get_db)):
     course = _get_or_404(db, course_id)
+    has_attendance = db.scalar(
+        select(func.count(Attendance.id)).where(Attendance.course_id == course.id)
+    )
+    has_grades = db.scalar(select(func.count(Grade.id)).where(Grade.course_id == course.id))
+    if has_attendance or has_grades:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "No se puede eliminar: el curso tiene asistencia o notas registradas",
+        )
     for student in course.students:  # Los alumnos quedan sin curso asignado
         student.course_id = None
     db.delete(course)

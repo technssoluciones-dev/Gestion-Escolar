@@ -15,7 +15,12 @@ def login(data: LoginIn, db: Session = Depends(get_db)):
     user = db.scalar(select(User).where(User.email == data.email.lower()))
     if user is None or not user.is_active or not verify_password(data.password, user.hashed_password):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Correo o contraseña incorrectos")
-    return TokenOut(access_token=create_token(user.id))
+    return TokenOut(
+        access_token=create_token(user.id),
+        role=user.role,
+        full_name=user.full_name,
+        email=user.email,
+    )
 
 
 @router.get("/me", response_model=UserOut)

@@ -43,6 +43,59 @@ function readDetail(detail: unknown): string {
   return "Ocurrió un error inesperado";
 }
 
+/** Sube un archivo (multipart/form-data) con el token de la sesión. */
+export async function apiUpload<T = unknown>(path: string, formData: FormData): Promise<T> {
+  const token = getToken();
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+  } catch {
+    throw new ApiError("No se pudo conectar con el servidor. ¿Está encendido el backend?", 0);
+  }
+  if (response.status === 401) {
+    clearToken();
+    if (typeof window !== "undefined") window.location.href = "/login";
+    throw new ApiError("Sesión expirada", 401);
+  }
+  if (response.status === 204) return undefined as T;
+  const data = await response.json().catch(() => null);
+  if (!response.ok) throw new ApiError(readDetail(data?.detail), response.status);
+  return data as T;
+}
+
+/** Descarga un archivo con el token de la sesión y lo guarda con el nombre indicado. */
+export async function downloadFile(path: string, filename: string): Promise<void> {
+  const token = getToken();
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+  } catch {
+    throw new ApiError("No se pudo conectar con el servidor. ¿Está encendido el backend?", 0);
+  }
+  if (response.status === 401) {
+    clearToken();
+    if (typeof window !== "undefined") window.location.href = "/login";
+    throw new ApiError("Sesión expirada", 401);
+  }
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    throw new ApiError(readDetail(data?.detail), response.status);
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 export async function api<T = unknown>(
   path: string,
   options: { method?: string; body?: unknown } = {},

@@ -6,9 +6,9 @@ from ..database import get_db
 from ..models import Teacher
 from ..rut import normalize_rut
 from ..schemas import Page, TeacherIn, TeacherOut
-from ..security import current_user
+from ..security import require_management, require_staff
 
-router = APIRouter(prefix="/teachers", tags=["Profesores"], dependencies=[Depends(current_user)])
+router = APIRouter(prefix="/teachers", tags=["Profesores"], dependencies=[Depends(require_staff)])
 
 
 def _check_rut_free(db: Session, rut: str, exclude_id: int | None = None) -> None:
@@ -50,7 +50,12 @@ def list_teachers(
     return {"items": items, "total": total}
 
 
-@router.post("", response_model=TeacherOut, status_code=201)
+@router.post(
+    "",
+    response_model=TeacherOut,
+    status_code=201,
+    dependencies=[Depends(require_management)],
+)
 def create_teacher(data: TeacherIn, db: Session = Depends(get_db)):
     _check_rut_free(db, data.rut)
     teacher = Teacher(**data.model_dump())
@@ -65,7 +70,11 @@ def get_teacher(teacher_id: int, db: Session = Depends(get_db)):
     return _get_or_404(db, teacher_id)
 
 
-@router.put("/{teacher_id}", response_model=TeacherOut)
+@router.put(
+    "/{teacher_id}",
+    response_model=TeacherOut,
+    dependencies=[Depends(require_management)],
+)
 def update_teacher(teacher_id: int, data: TeacherIn, db: Session = Depends(get_db)):
     teacher = _get_or_404(db, teacher_id)
     _check_rut_free(db, data.rut, exclude_id=teacher.id)
@@ -76,10 +85,14 @@ def update_teacher(teacher_id: int, data: TeacherIn, db: Session = Depends(get_d
     return teacher
 
 
-@router.delete("/{teacher_id}", status_code=204)
+@router.delete(
+    "/{teacher_id}", status_code=204, dependencies=[Depends(require_management)]
+)
 def delete_teacher(teacher_id: int, db: Session = Depends(get_db)):
     teacher = _get_or_404(db, teacher_id)
     for course in teacher.head_courses:  # El curso queda sin profesor jefe
         course.head_teacher_id = None
+    for course_subject in teacher.course_subjects:  # La asignatura queda sin profesor
+        course_subject.teacher_id = None
     db.delete(teacher)
     db.commit()

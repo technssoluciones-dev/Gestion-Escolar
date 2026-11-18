@@ -6,9 +6,9 @@ from ..database import get_db
 from ..models import Course, Guardian, Student
 from ..rut import normalize_rut
 from ..schemas import Page, StudentIn, StudentOut
-from ..security import current_user
+from ..security import require_management, require_staff
 
-router = APIRouter(prefix="/students", tags=["Estudiantes"], dependencies=[Depends(current_user)])
+router = APIRouter(prefix="/students", tags=["Estudiantes"], dependencies=[Depends(require_staff)])
 
 
 def _check_relations(db: Session, data: StudentIn) -> None:
@@ -56,7 +56,12 @@ def list_students(
     return {"items": items, "total": total}
 
 
-@router.post("", response_model=StudentOut, status_code=201)
+@router.post(
+    "",
+    response_model=StudentOut,
+    status_code=201,
+    dependencies=[Depends(require_management)],
+)
 def create_student(data: StudentIn, db: Session = Depends(get_db)):
     _check_rut_free(db, data.rut)
     _check_relations(db, data)
@@ -79,7 +84,11 @@ def get_student(student_id: int, db: Session = Depends(get_db)):
     return _get_or_404(db, student_id)
 
 
-@router.put("/{student_id}", response_model=StudentOut)
+@router.put(
+    "/{student_id}",
+    response_model=StudentOut,
+    dependencies=[Depends(require_management)],
+)
 def update_student(student_id: int, data: StudentIn, db: Session = Depends(get_db)):
     student = _get_or_404(db, student_id)
     _check_rut_free(db, data.rut, exclude_id=student.id)
@@ -91,7 +100,9 @@ def update_student(student_id: int, data: StudentIn, db: Session = Depends(get_d
     return student
 
 
-@router.delete("/{student_id}", status_code=204)
+@router.delete(
+    "/{student_id}", status_code=204, dependencies=[Depends(require_management)]
+)
 def delete_student(student_id: int, db: Session = Depends(get_db)):
     """No borra el registro: lo marca como inactivo (se conserva el historial)."""
     student = _get_or_404(db, student_id)

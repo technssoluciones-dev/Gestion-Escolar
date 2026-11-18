@@ -1,8 +1,15 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, setToken } from "@/lib/api";
+
+type LoginResponse = {
+  access_token: string;
+  role: "admin" | "secretaria" | "profesor" | "apoderado" | "estudiante";
+  full_name: string;
+};
 
 export default function LoginPage() {
   const router = useRouter();
@@ -16,12 +23,13 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
     try {
-      const data = await api<{ access_token: string }>("/auth/login", {
+      const data = await api<LoginResponse>("/auth/login", {
         method: "POST",
         body: { email, password },
       });
       setToken(data.access_token);
-      router.replace("/panel");
+      const isPortal = data.role === "apoderado" || data.role === "estudiante";
+      router.replace(isPortal ? "/portal" : "/panel");
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo iniciar sesión");
     } finally {
@@ -33,7 +41,7 @@ export default function LoginPage() {
     <div className="login-page">
       <form className="login-card" onSubmit={submit}>
         <h1>Gestión Escolar</h1>
-        <p>Ingresa con tu cuenta de administración.</p>
+        <p>Ingresa con tu cuenta del colegio o del portal de familias.</p>
         {error && <div className="alert">{error}</div>}
         <div className="field">
           <label htmlFor="email">Correo</label>
@@ -46,6 +54,10 @@ export default function LoginPage() {
         <button className="btn" disabled={loading}>
           {loading ? "Ingresando..." : "Ingresar"}
         </button>
+        <p className="muted small-text" style={{ marginTop: 12 }}>
+          ¿Postulas a un cupo?{" "}
+          <Link href="/postular">Completa tu postulación en línea</Link>
+        </p>
       </form>
     </div>
   );
